@@ -1,13 +1,18 @@
 use std::error::Error;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serenity::client::{Client, Context, EventHandler};
 use serenity::framework::standard::macros::{command, group};
 use serenity::framework::standard::{CommandResult, StandardFramework};
 use serenity::model::channel::Message;
 use serenity::prelude::*;
+use tokio::sync::Mutex;
 
+mod commands;
 use crate::word_storage::WordStorage;
+use crate::game::Game;
+use commands::help::*;
+use commands::game::*;
 
 struct WordStorageValue;
 
@@ -15,24 +20,14 @@ impl TypeMapKey for WordStorageValue {
     type Value = Arc<Mutex<WordStorage>>;
 }
 
-#[command]
-async fn help(ctx: &Context, msg: &Message) -> CommandResult {
-    msg.channel_id.say(&ctx.http, "nope").await?;
+struct GameValue;
 
-    {
-        let data = ctx.data.read().await;
-        let ws_data = data
-            .get::<WordStorageValue>()
-            .expect("Word Storage is not initialized!")
-            .clone();
-        let ws = ws_data.lock().unwrap();
-    }
-
-    Ok(())
+impl TypeMapKey for GameValue {
+    type Value = Arc<Mutex<Game>>;
 }
 
 #[group]
-#[commands(help)]
+#[commands(help,new_game,start_game,stop_game)]
 struct General;
 
 struct Handler;

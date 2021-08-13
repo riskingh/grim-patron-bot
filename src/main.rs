@@ -1,6 +1,7 @@
 use std::error::Error;
 
 mod client;
+mod game;
 mod word_storage;
 
 #[tokio::main]
