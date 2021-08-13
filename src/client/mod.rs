@@ -1,10 +1,9 @@
 use std::error::Error;
 use std::sync::Arc;
 
-use serenity::client::{Client, Context, EventHandler};
-use serenity::framework::standard::macros::{command, group};
+use serenity::client::{Client, EventHandler};
+use serenity::framework::standard::macros::group;
 use serenity::framework::standard::{CommandResult, StandardFramework};
-use serenity::model::channel::Message;
 use serenity::prelude::*;
 use tokio::sync::Mutex;
 
@@ -23,7 +22,7 @@ impl TypeMapKey for WordStorageValue {
 struct GameValue;
 
 impl TypeMapKey for GameValue {
-    type Value = Arc<Mutex<Game>>;
+    type Value = Mutex<Game>;
 }
 
 #[group]
