@@ -3,30 +3,30 @@ use std::sync::Arc;
 
 use serenity::client::{Client, EventHandler};
 use serenity::framework::standard::macros::group;
-use serenity::framework::standard::{CommandResult, StandardFramework};
+use serenity::framework::standard::StandardFramework;
 use serenity::prelude::*;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, RwLock};
 
 mod commands;
+use crate::game::GameManager;
 use crate::word_storage::WordStorage;
-use crate::game::Game;
-use commands::help::*;
 use commands::game::*;
+use commands::help::*;
 
 struct WordStorageValue;
 
 impl TypeMapKey for WordStorageValue {
-    type Value = Arc<Mutex<WordStorage>>;
+    type Value = Arc<RwLock<WordStorage>>;
 }
 
-struct GameValue;
+struct GameManagerValue;
 
-impl TypeMapKey for GameValue {
-    type Value = Mutex<Game>;
+impl TypeMapKey for GameManagerValue {
+    type Value = Mutex<GameManager>;
 }
 
 #[group]
-#[commands(help,new_game,start_game,stop_game)]
+#[commands(help, new_game, start_game, stop_game)]
 struct General;
 
 struct Handler;
@@ -48,7 +48,7 @@ pub async fn create_client(word_storage: WordStorage) -> Result<Client, Box<dyn 
 
     {
         let mut data = client.data.write().await;
-        data.insert::<WordStorageValue>(Arc::new(Mutex::new(word_storage)));
+        data.insert::<WordStorageValue>(Arc::new(RwLock::new(word_storage)));
     }
 
     Ok(client)

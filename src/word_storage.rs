@@ -2,9 +2,11 @@ use std::collections::HashSet;
 use std::fs;
 use std::io::{self, BufRead};
 
+// TODO: make `words` private
+// Stores lowercased and trimmed words.
 #[derive(Default)]
 pub struct WordStorage {
-    words: HashSet<String>,
+    pub words: HashSet<String>,
 }
 
 impl WordStorage {
