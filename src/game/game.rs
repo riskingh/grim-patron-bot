@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::collections::{HashMap, HashSet};
 use std::time::SystemTime;
+use rand;
 
 use tokio::task::JoinHandle;
 use tokio::sync::RwLock;
@@ -15,7 +16,8 @@ pub enum GameState {
 }
 
 pub struct Round {
-    pub substring: String,
+    pub triplet: String,
+    pub examples: HashSet<String>,
 }
 
 // TODO: consider making fields private
@@ -23,7 +25,7 @@ pub struct Game {
     pub state: GameState,
     pub round_job: Option<JoinHandle<()>>,
     pub round: Option<Round>,
-    triplets: HashMap<String, HashSet<String>>,
+    triplets: Vec<(String, HashSet<String>)>,
 }
 
 impl Game {
@@ -36,9 +38,21 @@ impl Game {
         }
     }
 
+    pub fn update_round(&mut self) {
+        let len = self.triplets.len();
+        assert!(len > 1);
+        let index = (rand::random::<f32>() * len as f32).floor() as usize;
+        self.triplets.swap(index, len - 1);
+        let round_triplet = self.triplets.pop().unwrap();
+        self.round = Some(Round{
+            triplet: round_triplet.0,
+            examples: round_triplet.1,
+        });
+    }
+
     // TODO: optimize this somehow cause rn !start_game takes 3-3.5 seconds to generate triplets
     // Goes over all words and saves at most N words for each triplet found.
-    fn generate_triplets(words: &HashSet<String>) -> HashMap<String, HashSet<String>> {
+    fn generate_triplets(words: &HashSet<String>) -> Vec<(String, HashSet<String>)> {
         let start_t = SystemTime::now();
 
         let mut triplet_examples: HashMap<&str, HashSet<&str>> = HashMap::new();
@@ -58,12 +72,12 @@ impl Game {
             }
         }
 
-        let mut result: HashMap<String, HashSet<String>> = HashMap::new();
+        let mut result: Vec<(String, HashSet<String>)> = Vec::new();
         for (t, s) in triplet_examples.iter() {
             if s.len() >= TRIPLET_EXAMPLES {
                 let mut new_s = HashSet::<String>::new();
                 for w in s.iter() { new_s.insert(w.to_string()); }
-                result.insert(t.to_string(), new_s);
+                result.push((t.to_string(), new_s));
             }
         }
 

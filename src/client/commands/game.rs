@@ -19,8 +19,22 @@ pub async fn new_game(ctx: &Context, msg: &Message) -> CommandResult {
             .expect("WordStorage must be initialized.")
             .clone();
         let ws_read = ws.read().await;
-        let game = GameManager::new(&ws_read.words);
+        let (game, mut message_rx) = GameManager::new(&ws_read.words);
         data.insert::<GameManagerValue>(Mutex::new(game));
+
+        let channel_id = msg.channel_id;
+        let ctx_http = ctx.http.clone();
+        tokio::spawn(async move {
+            loop {
+                match message_rx.recv().await {
+                    Some(msg) => {
+                        channel_id.say(&ctx_http, msg).await.unwrap();
+                    },
+                    None => return,
+                }
+            }
+        });
+
     }
     msg.channel_id.say(&ctx.http, "New game created. Use \"!start_game\" to start it.").await?;
     Ok(())
