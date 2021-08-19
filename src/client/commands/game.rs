@@ -28,7 +28,8 @@ pub async fn new_game(ctx: &Context, msg: &Message) -> CommandResult {
             loop {
                 match message_rx.recv().await {
                     Some(msg) => {
-                        channel_id.say(&ctx_http, msg).await.unwrap();
+                        channel_id.say(&ctx_http, &msg.text).await.unwrap();
+                        msg.ack().unwrap();
                     },
                     None => return,
                 }

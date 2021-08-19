@@ -8,6 +8,7 @@ use tokio::time::sleep;
 use tokio::task::JoinHandle;
 
 use super::game::{Game, GameState, Round};
+use super::message_channel;
 
 #[derive(Debug)]
 pub enum GameCommand {
@@ -19,18 +20,18 @@ pub struct GameManager {
     game: Arc<RwLock<Game>>,
     command_tx: mpsc::Sender::<GameCommand>,
     command_job: JoinHandle<()>,
-    message_tx: Arc<mpsc::Sender::<String>>,
+    message_tx: Arc<message_channel::MessageSender>,
 }
 
 impl GameManager {
-    pub fn new(words: &HashSet<String>) -> (GameManager, mpsc::Receiver::<String>) {
+    pub fn new(words: &HashSet<String>) -> (GameManager, message_channel::MessageReceiver) {
         let game = Arc::new(RwLock::new(Game::new(words)));
         let game_clone = game.clone();
 
         // TODO: increase buffer maybe
         // TODO: add ACKs through one-time channels or rework it
         let (command_tx, command_rx) = mpsc::channel(1);
-        let (message_tx, message_rx) = mpsc::channel(1000);
+        let (message_tx, message_rx) = message_channel::new(1);
         let message_tx = Arc::new(message_tx);
         let message_tx_clone = message_tx.clone();
 
@@ -60,7 +61,7 @@ impl GameManager {
     // Handles client commands, mutates Game according to them.
     async fn command_job(
         mut command_rx: mpsc::Receiver<GameCommand>,
-        mut message_tx: Arc<mpsc::Sender<String>>,
+        mut message_tx: Arc<message_channel::MessageSender>,
         game: Arc<RwLock<Game>>,
     ) {
         println!("Command job started!");
@@ -91,10 +92,10 @@ impl GameManager {
 
     // Generates round data, handles timeouts.
     async fn round_job(
-        mut message_tx: Arc<mpsc::Sender<String>>,
+        mut message_tx: Arc<message_channel::MessageSender>,
         game: Arc<RwLock<Game>>,
     ) {
-        message_tx.send(String::from("Round job started!")).await.unwrap();
+        message_tx.send_and_wait(String::from("Round job started!")).await;
         println!("Round job started!");
         let rounds = 3;
         let round_time = Duration::from_secs(5);
@@ -102,9 +103,9 @@ impl GameManager {
             {
                 let mut g = game.write().await;
                 g.update_round();
-                message_tx.send(
+                message_tx.send_and_wait(
                     format!("Round #{}: **{}**.", r, g.round.as_ref().unwrap().triplet.to_uppercase())
-                ).await.unwrap();
+                ).await;
             }
             sleep(round_time).await;
         }
