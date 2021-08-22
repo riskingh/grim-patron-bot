@@ -28,11 +28,9 @@ pub struct Round {
 }
 
 // TODO: consider making fields private
-// Game object. Implements basic sync functions, is not aware of the game flow.
+// Game object. Implements basic sync functions, requires manager to manage it's lifetime cycle.
 pub struct Game<P> {
     pub state: GameState,
-    // TODO: move to GameManager
-    pub round_job: Option<JoinHandle<()>>,
     pub round: Option<Round>,
     triplets: Vec<(String, HashSet<String>)>,
     players: HashMap<String, P>,
@@ -42,7 +40,6 @@ impl<P> Game<P> {
     pub fn new(words: &HashSet<String>) -> Game<P> {
         Game {
             state: GameState::Config,
-            round_job: None,
             round: None,
             triplets: Game::<P>::generate_triplets(words),
             players: HashMap::new(),
@@ -116,17 +113,6 @@ impl<P> Game<P> {
         println!("time: {:?}", elapsed);
 
         result
-    }
-}
-
-impl<P> Drop for Game<P> {
-    fn drop(&mut self) {
-        match &self.round_job {
-            Some(handle) => {
-                handle.abort();
-            }
-            None => {}
-        }
     }
 }
 

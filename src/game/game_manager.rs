@@ -15,27 +15,28 @@ use super::message_channel;
 #[derive(Debug)]
 pub enum GameManagerError {
     GameAlreadyStartedError,
+    GameAlreadyFinishedError,
 }
 
 impl fmt::Display for GameManagerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            GameManagerError::GameAlreadyStartedError => {
-                write!(f, "game is already started")
-            }
+            GameManagerError::GameAlreadyStartedError => write!(f, "game is already started"),
+            GameManagerError::GameAlreadyFinishedError => write!(f, "game is already finished"),
         }
     }
 }
 
 impl error::Error for GameManagerError {}
 
-type GameManagerResult = Result<(), Box<GameManagerError>>;
+type GameManagerResult = Result<(), GameManagerError>;
 
 // GameManager manages Game object by spawning tokio async jobs and handling commands from client.
 // Is aware of async runtime, but not aware of exact client implementation.
 pub struct GameManager<P> {
     game: Arc<RwLock<Game<P>>>,
     message_tx: Arc<message_channel::MessageSender>,
+    round_job: Option<JoinHandle<()>>,
 }
 
 impl<P> GameManager<P>
@@ -51,7 +52,7 @@ where
         let message_tx_clone = message_tx.clone();
 
         (
-            GameManager { game, message_tx },
+            GameManager { game, message_tx, round_job: None },
             message_rx,
         )
     }
@@ -78,18 +79,26 @@ where
     pub async fn start_game(&mut self) -> GameManagerResult {
         let mut g = self.game.write().await;
         if !matches!(g.state, GameState::Config) {
-            return Err(GameManagerError::GameAlreadyStartedError.into());
+            return Err(GameManagerError::GameAlreadyStartedError);
         }
         let game_clone = self.game.clone();
         let message_tx_clone = self.message_tx.clone();
-        g.round_job = Some(tokio::spawn(async move {
+        self.round_job = Some(tokio::spawn(async move {
             GameManager::round_job(message_tx_clone, game_clone).await;
         }));
         g.state = GameState::Ongoing;
         Ok(())
     }
 
-    pub async fn stop_game(&mut self) { todo!(); }
+    // Stops all jobs and moves game into `Finished` state.
+    pub async fn stop_game(&mut self) -> GameManagerResult {
+        let mut g = self.game.write().await;
+        if matches!(g.state, GameState::Finished) {
+            return Err(GameManagerError::GameAlreadyFinishedError);
+        }
+        todo!();
+        // ....
+    }
 
     // Generates round data, handles timeouts.
     async fn round_job(
@@ -125,8 +134,11 @@ where
     }
 }
 
-// impl<P> Drop for GameManager<P> {
-//     fn drop(&mut self) {
-//         self.command_job.abort();
-//     }
-// }
+impl<P> Drop for GameManager<P> {
+    fn drop(&mut self) {
+        match &self.round_job {
+            None => {},
+            Some(job) => job.abort(),
+        }
+    }
+}

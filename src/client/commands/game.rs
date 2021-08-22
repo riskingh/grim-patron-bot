@@ -33,7 +33,7 @@ pub async fn new_game(ctx: &Context, msg: &Message) -> CommandResult {
                 match message_rx.recv().await {
                     Some(msg) => {
                         channel_id.say(&ctx_http, &msg.text).await.unwrap();
-                        msg.ack().unwrap();
+                        msg.ack().unwrap();  // TODO: handle error, GM could be deleted at this point.
                     }
                     None => return,
                 }
@@ -61,12 +61,8 @@ pub async fn start_game(ctx: &Context, msg: &Message) -> CommandResult {
                 let mut gm = gm_ref.lock().await;
                 match gm.start_game().await {
                     Ok(_) => "Game is started!",
-                    Err(e) => {
-                        match *e {
-                            GameManagerError::GameAlreadyStartedError => "Game is already started!",
-                            _ => panic!("Unhandled error: {:?}", e)
-                        }
-                    }
+                    Err(GameManagerError::GameAlreadyStartedError) => "Game is already started!",
+                    Err(e) => panic!("Unhandled error: {:?}", e),
                 }
             },
             None => "You must create a game first with \"!new_game\" command.",
