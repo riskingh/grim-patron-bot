@@ -4,9 +4,10 @@ use serenity::client::Context;
 use serenity::framework::standard::macros::command;
 use serenity::framework::standard::CommandResult;
 use serenity::model::channel::Message;
+use serenity::utils::MessageBuilder;
 
 use crate::client::{GameManagerValue, WordStorageValue};
-use crate::game::{GameManager, GameCommand};
+use crate::game::{GameCommand, GameManager};
 
 // Creates a new game and stores it in `ctx.data`.
 // TODO: check for existing game first?
@@ -15,7 +16,8 @@ use crate::game::{GameManager, GameCommand};
 pub async fn new_game(ctx: &Context, msg: &Message) -> CommandResult {
     {
         let mut data = ctx.data.write().await;
-        let ws = data.get::<WordStorageValue>()
+        let ws = data
+            .get::<WordStorageValue>()
             .expect("WordStorage must be initialized.")
             .clone();
         let ws_read = ws.read().await;
@@ -30,14 +32,18 @@ pub async fn new_game(ctx: &Context, msg: &Message) -> CommandResult {
                     Some(msg) => {
                         channel_id.say(&ctx_http, &msg.text).await.unwrap();
                         msg.ack().unwrap();
-                    },
+                    }
                     None => return,
                 }
             }
         });
-
     }
-    msg.channel_id.say(&ctx.http, "New game created. Use \"!start_game\" to start it.").await?;
+    msg.channel_id
+        .say(
+            &ctx.http,
+            "New game created. Use \"!start_game\" to start it.",
+        )
+        .await?;
     Ok(())
 }
 
@@ -51,18 +57,22 @@ pub async fn start_game(ctx: &Context, msg: &Message) -> CommandResult {
             Some(game_ref) => {
                 let mut game = game_ref.lock().await;
                 if game.is_ongoing().await {
-                    msg.channel_id.say(&ctx.http, "Game is already started.").await?;
+                    msg.channel_id
+                        .say(&ctx.http, "Game is already started.")
+                        .await?;
                 } else {
                     game.send_command(GameCommand::Start).await;
                     msg.channel_id.say(&ctx.http, "Game is started!").await?;
                 }
-            },
+            }
             None => {
-                msg.channel_id.say(
-                    &ctx.http,
-                    "You must create a game first with \"!new_game\" command.",
-                ).await?;
-            },
+                msg.channel_id
+                    .say(
+                        &ctx.http,
+                        "You must create a game first with \"!new_game\" command.",
+                    )
+                    .await?;
+            }
         }
     }
     Ok(())
@@ -76,11 +86,32 @@ pub async fn stop_game(ctx: &Context, msg: &Message) -> CommandResult {
         match data.get_mut::<GameManagerValue>() {
             Some(_) => {
                 data.remove::<GameManagerValue>();
-                msg.channel_id.say(&ctx.http, "Stopped current game.").await?;
-            },
+                msg.channel_id
+                    .say(&ctx.http, "Stopped current game.")
+                    .await?;
+            }
             None => {
                 msg.channel_id.say(&ctx.http, "No game to stop.").await?;
-            },
+            }
+        }
+    }
+    Ok(())
+}
+
+#[command]
+#[aliases(join)]
+pub async fn join_game(ctx: &Context, msg: &Message) -> CommandResult {
+    {
+        let mut data = ctx.data.write().await;
+        match data.get_mut::<GameManagerValue>() {
+            Some(game_ref) => {
+                let mut game = game_ref.lock().await;
+                game.add_player(msg.author.name.clone(), msg.author.clone())
+                    .await;
+            }
+            None => {
+                todo!()
+            }
         }
     }
     Ok(())

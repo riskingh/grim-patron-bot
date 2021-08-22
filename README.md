@@ -11,6 +11,8 @@ Copy of Mudae "blacktea" game:
 4. Turns continue until only 1 player left.
 
 TODO (who needs issue tracker anyway):
+1. Get rid of command channel
+1. Rework message channels to allow passing users
 1. Handle user registration: receive registrations, store them in a Game object.
 1. Personalize rounds: tag users when sending a template, handle lives and user input.
 1. Fix race conditions and make sure all jobs are killed once another game is started.

@@ -15,19 +15,16 @@ impl fmt::Display for Message {
 }
 
 pub struct MessageSender {
-    tx: mpsc::Sender::<Message>,
+    tx: mpsc::Sender<Message>,
 }
 
 pub struct MessageReceiver {
-    rx: mpsc::Receiver::<Message>,
+    rx: mpsc::Receiver<Message>,
 }
 
 pub fn new(buffer: usize) -> (MessageSender, MessageReceiver) {
     let (tx, mut rx) = mpsc::channel::<Message>(buffer);
-    (
-        MessageSender{tx},
-        MessageReceiver{rx},
-    )
+    (MessageSender { tx }, MessageReceiver { rx })
 }
 
 impl Message {
@@ -39,7 +36,7 @@ impl Message {
 impl MessageSender {
     pub async fn send_and_wait(&self, text: String) {
         let (ack_tx, mut ack_rx) = oneshot::channel::<()>();
-        let msg = Message{text, ack_tx};
+        let msg = Message { text, ack_tx };
         self.tx.send(msg).await.unwrap();
         ack_rx.await.unwrap();
     }

@@ -1,12 +1,18 @@
-use std::sync::Arc;
-use std::collections::{HashMap, HashSet};
-use std::time::SystemTime;
 use rand;
+use std::collections::{HashMap, HashSet};
+use std::error::Error;
+use std::sync::Arc;
+use std::time::SystemTime;
 
-use tokio::task::JoinHandle;
 use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
 
 static TRIPLET_EXAMPLES: usize = 3;
+
+#[derive(Debug)]
+pub enum GameError {
+    PlayerKeyExistsError,
+}
 
 #[derive(Debug)]
 pub enum GameState {
@@ -21,20 +27,31 @@ pub struct Round {
 }
 
 // TODO: consider making fields private
-pub struct Game {
+pub struct Game<P> {
     pub state: GameState,
     pub round_job: Option<JoinHandle<()>>,
     pub round: Option<Round>,
     triplets: Vec<(String, HashSet<String>)>,
+    players: HashMap<String, P>,
 }
 
-impl Game {
-    pub fn new(words: &HashSet<String>) -> Game{
-        Game{
+impl<P> Game<P> {
+    pub fn new(words: &HashSet<String>) -> Game<P> {
+        Game {
             state: GameState::Config,
             round_job: None,
             round: None,
-            triplets: Game::generate_triplets(words),
+            triplets: Game::<P>::generate_triplets(words),
+            players: HashMap::new(),
+        }
+    }
+
+    pub fn add_player(&mut self, key: String, player: P) -> Result<(), GameError> {
+        if self.players.contains_key(&key) {
+            Err(GameError::PlayerKeyExistsError)
+        } else {
+            self.players.insert(key, player);
+            Ok(())
         }
     }
 
@@ -44,7 +61,7 @@ impl Game {
         let index = (rand::random::<f32>() * len as f32).floor() as usize;
         self.triplets.swap(index, len - 1);
         let round_triplet = self.triplets.pop().unwrap();
-        self.round = Some(Round{
+        self.round = Some(Round {
             triplet: round_triplet.0,
             examples: round_triplet.1,
         });
@@ -59,11 +76,13 @@ impl Game {
 
         for w in words.iter() {
             for i in 3..=w.len() {
-                let t = &w[i-3..i];
+                let t = &w[i - 3..i];
 
                 if triplet_examples.contains_key(&t) {
                     let mut s = triplet_examples.get_mut(&t).unwrap();
-                    if s.len() < TRIPLET_EXAMPLES { s.insert(&w); }
+                    if s.len() < TRIPLET_EXAMPLES {
+                        s.insert(&w);
+                    }
                 } else {
                     let mut s: HashSet<&str> = HashSet::new();
                     s.insert(&w);
@@ -76,7 +95,9 @@ impl Game {
         for (t, s) in triplet_examples.iter() {
             if s.len() >= TRIPLET_EXAMPLES {
                 let mut new_s = HashSet::<String>::new();
-                for w in s.iter() { new_s.insert(w.to_string()); }
+                for w in s.iter() {
+                    new_s.insert(w.to_string());
+                }
                 result.push((t.to_string(), new_s));
             }
         }
@@ -91,11 +112,13 @@ impl Game {
     }
 }
 
-impl Drop for Game {
+impl<P> Drop for Game<P> {
     fn drop(&mut self) {
         match &self.round_job {
-            Some(handle) => { handle.abort(); },
-            None => {},
+            Some(handle) => {
+                handle.abort();
+            }
+            None => {}
         }
     }
 }

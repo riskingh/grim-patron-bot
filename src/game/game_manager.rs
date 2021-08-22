@@ -1,30 +1,34 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 use std::time::Duration;
-use std::collections::HashSet;
 
 use tokio::sync::{mpsc, RwLock};
 
-use tokio::time::sleep;
 use tokio::task::JoinHandle;
+use tokio::time::sleep;
 
 use super::game::{Game, GameState, Round};
 use super::message_channel;
 
 #[derive(Debug)]
-pub enum GameCommand {
+pub enum GameCommand<P> {
     Start,
     Stop,
+    AddPlayer(String, P),
 }
 
-pub struct GameManager {
-    game: Arc<RwLock<Game>>,
-    command_tx: mpsc::Sender::<GameCommand>,
+pub struct GameManager<P> {
+    game: Arc<RwLock<Game<P>>>,
+    command_tx: mpsc::Sender<GameCommand<P>>,
     command_job: JoinHandle<()>,
     message_tx: Arc<message_channel::MessageSender>,
 }
 
-impl GameManager {
-    pub fn new(words: &HashSet<String>) -> (GameManager, message_channel::MessageReceiver) {
+impl<P> GameManager<P>
+where
+    P: std::marker::Sync + std::marker::Send + std::fmt::Debug + 'static,
+{
+    pub fn new(words: &HashSet<String>) -> (GameManager<P>, message_channel::MessageReceiver) {
         let game = Arc::new(RwLock::new(Game::new(words)));
         let game_clone = game.clone();
 
@@ -36,7 +40,7 @@ impl GameManager {
         let message_tx_clone = message_tx.clone();
 
         (
-            GameManager{
+            GameManager {
                 game,
                 command_tx,
                 command_job: tokio::spawn(async move {
@@ -53,39 +57,57 @@ impl GameManager {
         matches!(game.state, GameState::Ongoing)
     }
 
-    pub async fn send_command(&mut self, command: GameCommand) {
-        println!("Sending command: {:?}", command);
+    // TODO: remove command channel and invoke methods instead
+    pub async fn send_command(&mut self, command: GameCommand<P>) {
+        // TODO: handle error properly
         self.command_tx.send(command).await.unwrap();
+    }
+
+    pub async fn add_player(&mut self, key: String, player: P) {
+        let mut g = self.game.write().await;
+        match g.add_player(key.clone(), player) {
+            Ok(_) => {
+                self.message_tx
+                    .send_and_wait(format!("Player \"{}\" joined!", key))
+                    .await;
+            }
+            Err(e) => {
+                self.message_tx
+                    .send_and_wait(format!("Cannot add player \"{}\": {:?}", key, e))
+                    .await;
+            }
+        }
     }
 
     // Handles client commands, mutates Game according to them.
     async fn command_job(
-        mut command_rx: mpsc::Receiver<GameCommand>,
+        mut command_rx: mpsc::Receiver<GameCommand<P>>,
         mut message_tx: Arc<message_channel::MessageSender>,
-        game: Arc<RwLock<Game>>,
+        game: Arc<RwLock<Game<P>>>,
     ) {
         println!("Command job started!");
         loop {
             match command_rx.recv().await {
-                Some(command) => {
-                    println!("Command received: {:?}.", command);
-                    match command {
-                        GameCommand::Start => {
-                            let mut g = game.write().await;
-                            if !matches!(g.state, GameState::Config) {
-                                println!("Game must be in `Config` state to be started.");
-                                continue;
-                            }
-                            let game_clone = game.clone();
-                            let message_tx_clone = message_tx.clone();
-                            g.round_job = Some(tokio::spawn(async move {
-                                GameManager::round_job(message_tx_clone, game_clone).await;
-                            }));
-                        },
-                        _ => { todo!(); },
+                Some(command) => match command {
+                    GameCommand::Start => {
+                        let mut g = game.write().await;
+                        if !matches!(g.state, GameState::Config) {
+                            println!("Game must be in `Config` state to be started.");
+                            continue;
+                        }
+                        let game_clone = game.clone();
+                        let message_tx_clone = message_tx.clone();
+                        g.round_job = Some(tokio::spawn(async move {
+                            GameManager::round_job(message_tx_clone, game_clone).await;
+                        }));
+                    }
+                    _ => {
+                        todo!();
                     }
                 },
-                None => { todo!(); }
+                None => {
+                    todo!();
+                }
             }
         }
     }
@@ -93,9 +115,11 @@ impl GameManager {
     // Generates round data, handles timeouts.
     async fn round_job(
         mut message_tx: Arc<message_channel::MessageSender>,
-        game: Arc<RwLock<Game>>,
+        game: Arc<RwLock<Game<P>>>,
     ) {
-        message_tx.send_and_wait(String::from("Round job started!")).await;
+        message_tx
+            .send_and_wait(String::from("Round job started!"))
+            .await;
         println!("Round job started!");
         let rounds = 3;
         let round_time = Duration::from_secs(5);
@@ -103,9 +127,13 @@ impl GameManager {
             {
                 let mut g = game.write().await;
                 g.update_round();
-                message_tx.send_and_wait(
-                    format!("Round #{}: **{}**.", r, g.round.as_ref().unwrap().triplet.to_uppercase())
-                ).await;
+                message_tx
+                    .send_and_wait(format!(
+                        "Round #{}: **{}**.",
+                        r,
+                        g.round.as_ref().unwrap().triplet.to_uppercase()
+                    ))
+                    .await;
             }
             sleep(round_time).await;
         }
@@ -118,7 +146,7 @@ impl GameManager {
     }
 }
 
-impl Drop for GameManager {
+impl<P> Drop for GameManager<P> {
     fn drop(&mut self) {
         self.command_job.abort();
     }

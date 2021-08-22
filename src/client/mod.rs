@@ -4,6 +4,7 @@ use std::sync::Arc;
 use serenity::client::{Client, EventHandler};
 use serenity::framework::standard::macros::group;
 use serenity::framework::standard::StandardFramework;
+use serenity::model::user::User;
 use serenity::prelude::*;
 use tokio::sync::{Mutex, RwLock};
 
@@ -22,11 +23,11 @@ impl TypeMapKey for WordStorageValue {
 struct GameManagerValue;
 
 impl TypeMapKey for GameManagerValue {
-    type Value = Mutex<GameManager>;
+    type Value = Mutex<GameManager<User>>;
 }
 
 #[group]
-#[commands(help, new_game, start_game, stop_game)]
+#[commands(help, new_game, start_game, stop_game, join_game)]
 struct General;
 
 struct Handler;
