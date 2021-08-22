@@ -1,13 +1,15 @@
-use tokio::sync::Mutex;
+use std::future::Future;
 
+use tokio::sync::{Mutex, MutexGuard};
 use serenity::client::Context;
 use serenity::framework::standard::macros::command;
 use serenity::framework::standard::CommandResult;
 use serenity::model::channel::Message;
+use serenity::model::user::User;
 use serenity::utils::MessageBuilder;
 
 use crate::client::{GameManagerValue, WordStorageValue};
-use crate::game::{GameCommand, GameManager};
+use crate::game::{GameManager, GameManagerError};
 
 // Creates a new game and stores it in `ctx.data`.
 // TODO: check for existing game first?
@@ -47,34 +49,30 @@ pub async fn new_game(ctx: &Context, msg: &Message) -> CommandResult {
     Ok(())
 }
 
-// Starts a new game.
+
+// Starts created game.
 #[command]
 #[aliases(start)]
 pub async fn start_game(ctx: &Context, msg: &Message) -> CommandResult {
-    {
+    let response = {
         let mut data = ctx.data.write().await;
         match data.get_mut::<GameManagerValue>() {
-            Some(game_ref) => {
-                let mut game = game_ref.lock().await;
-                if game.is_ongoing().await {
-                    msg.channel_id
-                        .say(&ctx.http, "Game is already started.")
-                        .await?;
-                } else {
-                    game.send_command(GameCommand::Start).await;
-                    msg.channel_id.say(&ctx.http, "Game is started!").await?;
+            Some(gm_ref) => {
+                let mut gm = gm_ref.lock().await;
+                match gm.start_game().await {
+                    Ok(_) => "Game is started!",
+                    Err(e) => {
+                        match *e {
+                            GameManagerError::GameAlreadyStartedError => "Game is already started!",
+                            _ => panic!("Unhandled error: {:?}", e)
+                        }
+                    }
                 }
-            }
-            None => {
-                msg.channel_id
-                    .say(
-                        &ctx.http,
-                        "You must create a game first with \"!new_game\" command.",
-                    )
-                    .await?;
-            }
+            },
+            None => "You must create a game first with \"!new_game\" command.",
         }
-    }
+    };
+    msg.channel_id.say(&ctx.http, response).await?;
     Ok(())
 }
 

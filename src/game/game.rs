@@ -12,6 +12,7 @@ static TRIPLET_EXAMPLES: usize = 3;
 #[derive(Debug)]
 pub enum GameError {
     PlayerKeyExistsError,
+    GameMustBeInConfigStateError,
 }
 
 #[derive(Debug)]
@@ -27,8 +28,10 @@ pub struct Round {
 }
 
 // TODO: consider making fields private
+// Game object. Implements basic sync functions, is not aware of the game flow.
 pub struct Game<P> {
     pub state: GameState,
+    // TODO: move to GameManager
     pub round_job: Option<JoinHandle<()>>,
     pub round: Option<Round>,
     triplets: Vec<(String, HashSet<String>)>,
@@ -47,6 +50,10 @@ impl<P> Game<P> {
     }
 
     pub fn add_player(&mut self, key: String, player: P) -> Result<(), GameError> {
+        if !matches!(self.state, GameState::Config) {
+            return Err(GameError::GameMustBeInConfigStateError);
+        }
+
         if self.players.contains_key(&key) {
             Err(GameError::PlayerKeyExistsError)
         } else {
